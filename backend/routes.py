@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from backend.database.db import get_db
-from backend.database.models import Business, Product, Customer, Supplier, Order, AgentAction
+from backend.database.models import Business, Product, Customer, Supplier, Order, AgentAction, Expense
 from backend.agents.voice import parse_voice_booking
 from backend.services.llm import query_llm
 from backend.services.email_service import send_business_email
@@ -389,6 +389,17 @@ def get_dashboard_financials(business_id: str, db: Session = Depends(get_db)):
 
     monthly_profit = max(0.0, monthly_revenue - monthly_cogs)
 
+    # Exclude inventory purchases to prevent double-counting with COGS in net profit
+    month_start_date = datetime(now.year, now.month, 1).strftime("%Y-%m-%d")
+    expenses_db = db.query(Expense).filter(
+        Expense.business_id == business_id,
+        Expense.date >= month_start_date
+    ).all()
+    monthly_expenses = sum(e.amount for e in expenses_db)
+    other_expenses = sum(e.amount for e in expenses_db if e.category != "Inventory Purchase")
+    
+    monthly_profit = max(0.0, monthly_revenue - monthly_cogs - other_expenses)
+
     # Weekly Comparison
     seven_days_ago = (now - timedelta(days=7)).isoformat()
     fourteen_days_ago = (now - timedelta(days=14)).isoformat()
@@ -417,6 +428,7 @@ def get_dashboard_financials(business_id: str, db: Session = Depends(get_db)):
     return {
         "monthly_revenue": f"₹{monthly_revenue:,.2f}",
         "monthly_cogs": f"₹{monthly_cogs:,.2f}",
+        "monthly_expenses": f"₹{monthly_expenses:,.2f}",
         "monthly_profit": f"₹{monthly_profit:,.2f}",
         "current_week_revenue": f"₹{current_week_rev:,.2f}",
         "prev_week_revenue": f"₹{prev_week_rev:,.2f}",
@@ -450,6 +462,7 @@ def execute_action_confirm(action_id: str, data: dict = Body(...), db: Session =
     if action.agent_type == "restock":
         qty_received = int(data.get("qty_received", 50))
         actual_cost = float(data.get("actual_cost", 0.0))
+        log_as_expense = bool(data.get("log_as_expense", True))
         
         parts = action.trigger_reason.split("Product: ")
         if len(parts) > 1:
@@ -462,6 +475,17 @@ def execute_action_confirm(action_id: str, data: dict = Body(...), db: Session =
                 product.current_stock += qty_received
                 if actual_cost > 0:
                     product.unit_cost = actual_cost / qty_received if qty_received > 0 else product.unit_cost
+                    
+                    if log_as_expense:
+                        # Log Restock Expense
+                        expense = Expense(
+                            business_id=action.business_id,
+                            title=f"Auto PO Restock - {product.name} ({qty_received} units)",
+                            category="Inventory Purchase",
+                            amount=actual_cost,
+                            date=datetime.now().strftime("%Y-%m-%d")
+                        )
+                        db.add(expense)
                 
                 supplier = db.query(Supplier).filter(Supplier.id == product.supplier_id).first()
                 if supplier and supplier.contact_channel:
@@ -827,3 +851,51 @@ def create_reminder(data: dict = Body(...), db: Session = Depends(get_db)):
     db.refresh(action)
 
     return {"status": "success", "reminder": action}
+
+@router.get("/expenses")
+def get_expenses(business_id: str, db: Session = Depends(get_db)):
+    return db.query(Expense).filter(Expense.business_id == business_id).order_by(Expense.date.desc()).all()
+
+@router.post("/expenses")
+def create_expense(data: dict = Body(...), db: Session = Depends(get_db)):
+    business_id = data.get("business_id")
+    title = data.get("title")
+    category = data.get("category", "Others")
+    amount = float(data.get("amount", 0.0))
+    date_val = data.get("date") or datetime.now().strftime("%Y-%m-%d")
+
+    if not business_id or not title or amount <= 0:
+        raise HTTPException(status_code=400, detail="Missing required expense fields")
+
+    expense = Expense(
+        business_id=business_id,
+        title=title,
+        category=category,
+        amount=amount,
+        date=date_val
+    )
+    db.add(expense)
+    db.commit()
+    db.refresh(expense)
+
+    return {"status": "success", "expense": expense}
+
+@router.get("/dashboard/expenses/breakdown")
+def get_expense_breakdown(business_id: str, db: Session = Depends(get_db)):
+    now = datetime.now()
+    month_start = datetime(now.year, now.month, 1).strftime("%Y-%m-%d")
+    
+    expenses = db.query(Expense).filter(
+        Expense.business_id == business_id,
+        Expense.date >= month_start
+    ).all()
+
+    breakdown = {}
+    for exp in expenses:
+        breakdown[exp.category] = breakdown.get(exp.category, 0.0) + exp.amount
+
+    result = [
+        {"name": cat, "value": amt}
+        for cat, amt in breakdown.items()
+    ]
+    return result

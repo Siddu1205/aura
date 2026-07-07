@@ -6,6 +6,7 @@ export default function ApprovalQueue({ actions, onExecute, onIgnore }) {
   
   // Modal state
   const [confirmingAction, setConfirmingAction] = useState(null);
+  const [logAsExpense, setLogAsExpense] = useState(true);
   const [restockForm, setRestockForm] = useState({ qty_received: 50, actual_cost: 0 });
   const [collectionsForm, setCollectionsForm] = useState({ amount_paid: 0 });
 
@@ -73,7 +74,8 @@ export default function ApprovalQueue({ actions, onExecute, onIgnore }) {
     if (confirmingAction.agent_type === 'restock') {
       payload = {
         qty_received: parseInt(restockForm.qty_received),
-        actual_cost: parseFloat(restockForm.actual_cost)
+        actual_cost: parseFloat(restockForm.actual_cost),
+        log_as_expense: logAsExpense
       };
     } else if (confirmingAction.agent_type === 'collections') {
       payload = {
@@ -229,6 +231,18 @@ export default function ApprovalQueue({ actions, onExecute, onIgnore }) {
                     placeholder="e.g. 4000"
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                   />
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <input 
+                    type="checkbox"
+                    id="log_expense_check"
+                    checked={logAsExpense}
+                    onChange={e => setLogAsExpense(e.target.checked)}
+                    className="w-3.5 h-3.5 accent-indigo-500 rounded cursor-pointer"
+                  />
+                  <label htmlFor="log_expense_check" className="text-[11px] text-slate-400 font-medium cursor-pointer">
+                    Log this purchase order as a Business Expense
+                  </label>
                 </div>
               </div>
             )}

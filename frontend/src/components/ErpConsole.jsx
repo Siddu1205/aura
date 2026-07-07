@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Users, Truck, ShoppingCart, Plus, Check, Mail, Server, Lock, Bell, AlertCircle } from 'lucide-react';
+import { Package, Users, Truck, ShoppingCart, Plus, Check, Mail, Server, Lock, Bell, AlertCircle, DollarSign, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function ErpConsole({ user }) {
@@ -7,6 +7,7 @@ export default function ErpConsole({ user }) {
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [expenses, setExpenses] = useState([]);
   
   // Settings / SMTP state
   const [smtpSettings, setSmtpSettings] = useState({
@@ -30,6 +31,14 @@ export default function ErpConsole({ user }) {
     contact_channel: ''
   });
 
+  // Expense form state
+  const [expForm, setExpForm] = useState({
+    title: '',
+    category: 'Rent',
+    amount: '',
+    date: ''
+  });
+
   const backendUrl = "http://localhost:8000/api";
 
   const fetchData = async () => {
@@ -46,6 +55,11 @@ export default function ErpConsole({ user }) {
       const sRes = await fetch(`${backendUrl}/suppliers?business_id=${user.business_id}`);
       const sData = await sRes.json();
       setSuppliers(sData);
+
+      // Fetch expenses
+      const expRes = await fetch(`${backendUrl}/expenses?business_id=${user.business_id}`);
+      const expData = await expRes.json();
+      setExpenses(expData);
 
       // Fetch SMTP settings
       const settingsRes = await fetch(`${backendUrl}/settings?business_id=${user.business_id}`);
@@ -143,7 +157,7 @@ export default function ErpConsole({ user }) {
       const data = await res.json();
       if (data.status === 'success') {
         toast.success(`Supplier ${suppForm.name} Added!`);
-        setSuppForm({ name: '', contact_channel: '' });
+        setCustForm({ name: '', contact_channel: '', consent_status: 'opted_in', outstanding_due: '0' });
         fetchData();
       }
     } catch (err) {
@@ -233,6 +247,33 @@ export default function ErpConsole({ user }) {
     }
   };
 
+  const handleCreateManualExpense = async (e) => {
+    e.preventDefault();
+    if (!expForm.title || !expForm.amount) {
+      toast.error("Please fill expense details.");
+      return;
+    }
+    try {
+      const res = await fetch(`${backendUrl}/expenses`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...expForm,
+          amount: parseFloat(expForm.amount),
+          business_id: user.business_id
+        })
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        toast.success("Expense Logged successfully!");
+        setExpForm({ title: '', category: 'Rent', amount: '', date: '' });
+        fetchData();
+      }
+    } catch (err) {
+      toast.error("Failed to log expense.");
+    }
+  };
+
   return (
     <div className="bg-slate-900/60 backdrop-blur-md border border-slate-800 p-6 rounded-2xl shadow-xl space-y-6">
       
@@ -296,6 +337,15 @@ export default function ErpConsole({ user }) {
           >
             <Bell className="w-3.5 h-3.5" />
             Set Reminder
+          </button>
+          <button 
+            onClick={() => setActiveTab('expenses')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+              activeTab === 'expenses' ? 'bg-indigo-600 text-slate-100' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <DollarSign className="w-3.5 h-3.5" />
+            Expenses
           </button>
         </div>
       </div>
@@ -840,6 +890,121 @@ export default function ErpConsole({ user }) {
               Set Reminder Action
             </button>
           </form>
+        </div>
+      )}
+
+      {/* EXPENSES TAB */}
+      {activeTab === 'expenses' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-slide-in">
+          {/* Table */}
+          <div className="lg:col-span-2 space-y-3">
+            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Business Expense Ledger</h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-800">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-950/60 text-slate-400 border-b border-slate-800">
+                    <th className="p-3">Expense Name</th>
+                    <th className="p-3">Category</th>
+                    <th className="p-3">Amount (₹)</th>
+                    <th className="p-3">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {Array.isArray(expenses) && expenses.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" className="p-4 text-center text-slate-500">No expenses recorded yet.</td>
+                    </tr>
+                  ) : (
+                    expenses.map(e => (
+                      <tr key={e.id} className="hover:bg-slate-900/20">
+                        <td className="p-3 font-semibold text-slate-200">{e.title}</td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                            e.category === 'Inventory Purchase' ? 'bg-blue-500/10 text-blue-400' :
+                            e.category === 'Rent' ? 'bg-pink-500/10 text-pink-400' :
+                            e.category === 'Utilities' ? 'bg-amber-500/10 text-amber-400' :
+                            e.category === 'Salaries' ? 'bg-emerald-500/10 text-emerald-400' :
+                            'bg-slate-800 text-slate-400'
+                          }`}>
+                            {e.category}
+                          </span>
+                        </td>
+                        <td className="p-3 text-slate-300 font-mono">₹{e.amount.toFixed(2)}</td>
+                        <td className="p-3 text-slate-400 font-mono flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                          {e.date}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Form */}
+          <div className="bg-slate-950/40 p-5 rounded-xl border border-slate-800/80 space-y-4">
+            <h3 className="text-sm font-semibold text-slate-200">Log Manual Expense</h3>
+            <form onSubmit={handleCreateManualExpense} className="space-y-3">
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Expense Description</label>
+                <input 
+                  type="text" 
+                  required
+                  value={expForm.title} 
+                  onChange={e => setExpForm({...expForm, title: e.target.value})}
+                  placeholder="e.g. July Shop Rent" 
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Category</label>
+                  <select 
+                    value={expForm.category} 
+                    onChange={e => setExpForm({...expForm, category: e.target.value})}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-400 focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="Rent">Rent</option>
+                    <option value="Utilities">Utilities</option>
+                    <option value="Salaries">Salaries</option>
+                    <option value="Marketing">Marketing</option>
+                    <option value="Others">Others</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Amount Paid (₹)</label>
+                  <input 
+                    type="number" 
+                    required
+                    value={expForm.amount} 
+                    onChange={e => setExpForm({...expForm, amount: e.target.value})}
+                    placeholder="e.g. 5000" 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Date (Optional)</label>
+                <input 
+                  type="date" 
+                  value={expForm.date} 
+                  onChange={e => setExpForm({...expForm, date: e.target.value})}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-400 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <button 
+                type="submit" 
+                className="w-full py-2.5 bg-rose-600 hover:bg-rose-500 text-slate-950 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all mt-4"
+              >
+                <Plus className="w-4 h-4 text-slate-950" />
+                Log Expense
+              </button>
+            </form>
+          </div>
         </div>
       )}
     </div>

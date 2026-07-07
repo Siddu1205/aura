@@ -39,6 +39,7 @@ export default function App() {
   const [financials, setFinancials] = useState(null);
   const [actions, setActions] = useState([]);
   const [summary, setSummary] = useState(null);
+  const [expenseBreakdown, setExpenseBreakdown] = useState([]);
   
   // Daily Summary configurations
   const [dateRange, setDateRange] = useState(1); // 1, 7, 30 days
@@ -80,6 +81,11 @@ export default function App() {
       const financialsRes = await fetch(`${backendUrl}/dashboard/financials?business_id=${user.business_id}`);
       const financialsData = await financialsRes.json();
       setFinancials(financialsData);
+
+      // Fetch expense breakdown
+      const expBreakdownRes = await fetch(`${backendUrl}/dashboard/expenses/breakdown?business_id=${user.business_id}`);
+      const expBreakdownData = await expBreakdownRes.json();
+      setExpenseBreakdown(expBreakdownData);
 
       // Fetch actions
       const actionsRes = await fetch(`${backendUrl}/actions?business_id=${user.business_id}`);
@@ -433,34 +439,44 @@ export default function App() {
                   </span>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
                   <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800/80 flex justify-between items-center">
                     <div>
-                      <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider block">Monthly Gross Revenue</span>
-                      <span className="text-xl font-extrabold text-slate-200 mt-1 block">{financials.monthly_revenue}</span>
+                      <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider block">Gross Revenue</span>
+                      <span className="text-lg font-extrabold text-slate-200 mt-1 block">{financials.monthly_revenue}</span>
                     </div>
-                    <div className="p-3 bg-blue-500/10 rounded-xl text-blue-400">
-                      <IndianRupee className="w-5 h-5" />
+                    <div className="p-2.5 bg-blue-500/10 rounded-lg text-blue-400">
+                      <IndianRupee className="w-4 h-4" />
                     </div>
                   </div>
 
                   <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800/80 flex justify-between items-center">
                     <div>
-                      <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider block">Cost of Goods Sold (COGS)</span>
-                      <span className="text-xl font-extrabold text-slate-300 mt-1 block">{financials.monthly_cogs}</span>
+                      <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider block">Cost of Goods (COGS)</span>
+                      <span className="text-lg font-extrabold text-slate-300 mt-1 block">{financials.monthly_cogs}</span>
                     </div>
-                    <div className="p-3 bg-slate-800 rounded-xl text-slate-400">
-                      <FileText className="w-5 h-5" />
+                    <div className="p-2.5 bg-slate-800 rounded-lg text-slate-400">
+                      <FileText className="w-4 h-4" />
                     </div>
                   </div>
 
                   <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800/80 flex justify-between items-center">
                     <div>
-                      <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider block">Net Gross Profit</span>
-                      <span className="text-xl font-extrabold text-emerald-400 mt-1 block">{financials.monthly_profit}</span>
+                      <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider block">Total Expenses</span>
+                      <span className="text-lg font-extrabold text-rose-400 mt-1 block">{financials.monthly_expenses || '₹0.00'}</span>
                     </div>
-                    <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-400 font-bold">
-                      <Sparkles className="w-5 h-5" />
+                    <div className="p-2.5 bg-rose-500/10 rounded-lg text-rose-400">
+                      <IndianRupee className="w-4 h-4" />
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800/80 flex justify-between items-center">
+                    <div>
+                      <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider block">Net Profit</span>
+                      <span className="text-lg font-extrabold text-emerald-400 mt-1 block">{financials.monthly_profit}</span>
+                    </div>
+                    <div className="p-2.5 bg-emerald-500/10 rounded-lg text-emerald-400 font-bold">
+                      <Sparkles className="w-4 h-4" />
                     </div>
                   </div>
                 </div>
@@ -481,6 +497,20 @@ export default function App() {
                     <span className="text-slate-500 font-mono">({financials.weekly_comparison.label})</span>
                   </div>
                 </div>
+
+                {expenseBreakdown && expenseBreakdown.length > 0 && (
+                  <div className="mt-6 pt-5 border-t border-slate-800/80 space-y-3">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Expense Breakdown by Category</span>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      {expenseBreakdown.map(item => (
+                        <div key={item.name} className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/40 text-xs">
+                          <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider block">{item.name}</span>
+                          <span className="text-sm font-bold text-rose-400 mt-1 block">₹{item.value.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
