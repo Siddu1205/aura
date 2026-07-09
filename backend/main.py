@@ -5,6 +5,8 @@ from backend.routes import router
 from backend.seed import seed_database
 from backend.services.orchestrator import start_orchestrator, stop_orchestrator
 
+"""Backend application entry point for the AURA service."""
+
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("aura.main")
